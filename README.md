@@ -10,11 +10,44 @@ This folder holds the design documents and the first eve agent (Phase 1: read-on
 |---|---|
 | `agent/agent.ts` | eve agent config: model via the LEAP LLM gateway, eve's default shell/file/web tools turned off, token limits. |
 | `agent/instructions.md` | The agent's always-on rules (from guide section 2), audit steps and report format. |
-| `agent/tools/run_existing_quality_checks.ts` | Calls the existing `POST /bl_quality` service and returns each check's result with its issue flag ID, redacting phone/email/GSTIN. Read-only. |
-| `.env.example` | Environment variables to copy into `.env.local`. |
+| `agent/tools/` | 12 read-only data tools, one per data source (table below). |
+| `agent/skills/` | 6 skills that tell the model how to collect and read that data (table below). |
+| `agent/lib/` | Shared helpers: the common result envelope, HTTP/Postgres/Redis clients (Postgres sessions forced read-only), PII masking, IST time formats, the getisq parser. |
+| `.env.example` | Every URL, key and database connection the tools need, with placeholders. Copy to `.env.local`. |
+| `tsconfig.json` | Strict TypeScript settings for `npm run typecheck`. |
 | `package.json` | eve 1.0.0-rc.6, `ai`, `zod`, `@ai-sdk/openai-compatible`; Node 24+. |
 | `LEAP_Agentic_BL_Quality_Audit_Implementation_Guide.md` | The main guide (v1.1). Architecture, tools, skills, correction policy, approval gates, data model, testing, rollout and open decisions. Its current-state sections were checked against the code. |
 | `LEAP_Agentic_BL_Quality_Audit_Implementation_Guide.pdf` | PDF export of **v1.0**. It predates the code-verified corrections, so use the `.md` until the PDF is regenerated. |
+
+## Data tools
+
+Each tool wraps an API, table or cache that LEAP already uses (mostly lifted from the Go workers), and returns the same envelope: `status` (`SUCCESS`, `PARTIAL`, `NOT_FOUND`, `DENIED`, `TIMEOUT`, `NOT_CONFIGURED`, ...), `records`, `warnings`, `source_systems`. SQL is fixed in code; the model only supplies IDs.
+
+| Tool | What it returns | Source |
+|---|---|---|
+| `get_current_bl` | The BL: title, description, MCAT, status, quantity/unit, buyer-filled details, ISQ answers | `ETO_OFR` / `_EXPIRED` / `_TEMP_DEL`, `DIR_QUERY_FREE`, getisq |
+| `run_existing_quality_checks` | Results of the current checks (flags 1–7) | `POST /bl_quality` |
+| `get_existing_quality_audit` | Changes the current agent already made to this BL | `leap_blml_agent_audit_log` (postgreML) |
+| `get_whatsapp_history` | LEAP WhatsApp log for the lead and the buyer's 9696 messages | `ETO_LEAD_WHATSAPP*`, waapi `get_extractor_llm_calling` |
+| `get_vaani_evidence` | Whether a call recording exists; optionally what the buyer said (extracted) | `DIR_QUERY_FREE`, `ETO_LEAP_AI_BOT_RESPONSE`, Redis `VANI_MCAT_MANUAL`, `call_data_extractor` |
+| `get_buyer_activity` | Searches, browses, enquiries and PNS calls in a time window | bizfeed `ImBuyerActivity`, `PNS_CALL_ALL_RECORDS` |
+| `get_product_context` | Name, price, MCAT (and optionally specs) of products the buyer viewed | products/detail service |
+| `get_past_buyer_leads` | The buyer's other leads (live, expired, deleted, pending) | `ETO_OFR*`, `DIR_QUERY_FREE` |
+| `get_buyer_profile` | Non-contact profile flags (GST verified, business type, turnover, city) | buyerprofile service |
+| `search_mcat_taxonomy` | Ranked candidate MCATs for a text, plus the current MCAT's parents/children | Solr `related_info`, MasterDetail |
+| `get_attribute_definitions` | Spec questions, allowed options and units for an MCAT | getisq (MCAT mode) |
+| `get_mcat_quantity_stats` | Typical price (Q1/median/Q3) and BL quantity percentiles for an MCAT + unit | `mcatunittov`, Redis `MCAT_QTY_STATS` |
+
+## Skills
+
+| Skill | When the model loads it |
+|---|---|
+| `evidence-aggregation` | Start of every audit: which tools to call, in what order, how to read each status, coverage matrix (guide S02). |
+| `conversation-evidence` | Reading WhatsApp and Vaani evidence; what wins when they disagree. |
+| `buyer-activity-evidence` | Reading activity and product pages as weak signals. |
+| `buyer-history-and-profile` | Summarizing past leads and profile as context (guide S04). |
+| `mcat-and-attributes` | Checking MCAT fit, spec validity and quantity/unit plausibility. |
+| `requirement-synthesis` | Building the buyer's requirement with per-field source and confidence (guide S03). |
 
 ## Run the agent
 
@@ -23,12 +56,15 @@ Requires Node.js 24+.
 ```bash
 cd BL_QUALITY_2.0
 npm install
-cp .env.example .env.local   # then fill in LLM_API_KEY and BL_QUALITY_API_URL
+cp .env.example .env.local   # then fill in what you have access to
 npx eve info                 # checks the agent compiles; should show 0 errors
+npm run typecheck            # strict TypeScript check
 npx eve dev                  # opens the terminal chat UI
 ```
 
-In the chat, paste a BL (title, description, MCAT, ISQs, quantity) and ask for an audit. The agent runs the existing checks, adds its own findings and returns a report ending in `READY_FOR_EXISTING_APPROVAL`, `MANUAL_REVIEW` or `BUYER_CLARIFICATION`. It cannot change, approve or reject a lead.
+In the chat, ask "audit BL 123456789". The agent loads the BL, gathers evidence, and returns a report ending in `READY_FOR_EXISTING_APPROVAL`, `MANUAL_REVIEW`, `BUYER_CLARIFICATION` or `TECHNICAL_RETRY`. It cannot change, approve or reject a lead. You can also paste BL text with no ID; then only the existing checks run.
+
+Most sources only answer from inside the LEAP cluster IP range or VPN. Any tool whose variables are blank returns `NOT_CONFIGURED`, and the agent reports that source as "could not verify" rather than "nothing found".
 
 ## Where to start
 

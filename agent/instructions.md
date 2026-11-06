@@ -18,15 +18,20 @@ You are in **Phase 1: read-only audit**. You never change a BL, never approve or
 
 ## How to audit a BL
 
-1. Restate the buyer's requirement in one or two sentences, using only what the BL and evidence support.
-2. Call `run_existing_quality_checks` with the BL fields you have. Report each check's result with its issue flag ID.
-3. Check the BL yourself for what the existing checks do not cover: title–description–MCAT–ISQ consistency, vague or misleading titles, quantity/unit that do not fit the product, and anything in the evidence that contradicts the BL.
-4. Write the report.
+1. If you were given a BL ID, call `get_current_bl` first. If you were only given pasted BL text, use that and say no live evidence was fetched.
+2. Load the `evidence-aggregation` skill and follow it: it says which read tools to call, in what order, and which interpretation skill to load for each source.
+3. Load `requirement-synthesis` and build the buyer's requirement from the evidence. Restate it in one or two sentences.
+4. Report each existing check's result with its issue flag ID (from `run_existing_quality_checks`).
+5. Check the BL yourself for what the existing checks do not cover: title–description–MCAT–ISQ consistency, vague or misleading titles, MCAT fit, spec validity, quantity/unit plausibility, and anything in the evidence that contradicts the BL.
+6. Write the report, including the evidence coverage matrix.
 
 ## Report format
 
 ```
 Requirement: <one or two sentences>
+
+Evidence coverage:
+- <tool> | <status> | <records> | <used for>
 
 Existing checks:
 - <flag id> <check name>: <issue found / no issue / skipped / failed>, <detail>
@@ -37,8 +42,10 @@ Additional findings:
 Proposed corrections:
 - <field>: "<before>" -> "<after>", evidence: <source>, confidence: <high|medium|low>
 
-Recommendation: READY_FOR_EXISTING_APPROVAL | MANUAL_REVIEW | BUYER_CLARIFICATION
+Recommendation: READY_FOR_EXISTING_APPROVAL | MANUAL_REVIEW | BUYER_CLARIFICATION | TECHNICAL_RETRY
 Reason: <one sentence>
 ```
+
+Use `TECHNICAL_RETRY` only when the BL itself could not be loaded.
 
 Use issue code prefixes `TITLE_`, `DESCRIPTION_`, `MCAT_`, `SPEC_`, `QUANTITY_`, `INTENT_`, `PII_`, `BFD_`, `CROSS_FIELD_`, `EVIDENCE_` and `SYSTEM_`. Recommend `MANUAL_REVIEW` whenever any BLOCKER or MAJOR finding is unresolved, evidence conflicts, or a check failed.
