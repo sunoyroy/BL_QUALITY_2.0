@@ -2,14 +2,33 @@
 
 Design work for replacing the current BL Quality Agent (a set of independent checks) with an evidence-led audit agent. The agent works out what the buyer actually wants, checks every part of the Buyer Lead (BL) against that, fixes only what evidence supports, re-checks the result, and then approves the lead or sends it to manual review.
 
-This folder holds documents only. It contains no code yet.
+This folder holds the design documents and the first eve agent (Phase 1: read-only audit).
 
 ## Files
 
 | File | What it is |
 |---|---|
+| `agent/agent.ts` | eve agent config: model via the LEAP LLM gateway, eve's default shell/file/web tools turned off, token limits. |
+| `agent/instructions.md` | The agent's always-on rules (from guide section 2), audit steps and report format. |
+| `agent/tools/run_existing_quality_checks.ts` | Calls the existing `POST /bl_quality` service and returns each check's result with its issue flag ID, redacting phone/email/GSTIN. Read-only. |
+| `.env.example` | Environment variables to copy into `.env.local`. |
+| `package.json` | eve 1.0.0-rc.6, `ai`, `zod`, `@ai-sdk/openai-compatible`; Node 24+. |
 | `LEAP_Agentic_BL_Quality_Audit_Implementation_Guide.md` | The main guide (v1.1). Architecture, tools, skills, correction policy, approval gates, data model, testing, rollout and open decisions. Its current-state sections were checked against the code. |
 | `LEAP_Agentic_BL_Quality_Audit_Implementation_Guide.pdf` | PDF export of **v1.0**. It predates the code-verified corrections, so use the `.md` until the PDF is regenerated. |
+
+## Run the agent
+
+Requires Node.js 24+.
+
+```bash
+cd BL_QUALITY_2.0
+npm install
+cp .env.example .env.local   # then fill in LLM_API_KEY and BL_QUALITY_API_URL
+npx eve info                 # checks the agent compiles; should show 0 errors
+npx eve dev                  # opens the terminal chat UI
+```
+
+In the chat, paste a BL (title, description, MCAT, ISQs, quantity) and ask for an audit. The agent runs the existing checks, adds its own findings and returns a report ending in `READY_FOR_EXISTING_APPROVAL`, `MANUAL_REVIEW` or `BUYER_CLARIFICATION`. It cannot change, approve or reject a lead.
 
 ## Where to start
 

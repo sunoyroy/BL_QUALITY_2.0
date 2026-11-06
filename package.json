@@ -1,0 +1,19 @@
+{
+  "name": "bl-quality-audit-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LEAP agentic Buyer Lead quality and audit agent built on eve",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "eve dev"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.85",
+    "ai": "^7.0.163",
+    "eve": "^1.0.0-rc.6",
+    "zod": "^4.6.7"
+  }
+}
